@@ -91,6 +91,10 @@ static uint32_t _atoi(const char* sp) {
   UITask ui_task(&board, &serial_interface);
 #endif
 
+#if defined(ENABLE_DOGECHAT) && (defined(ESP32) || defined(NRF52_PLATFORM))
+  #include <helpers/dogechat/DogechatBridge.h>
+#endif
+
 StdRNG fast_rng;
 SimpleMeshTables tables;
 MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
@@ -98,6 +102,10 @@ MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
       , &ui_task
    #endif
 );
+
+#if defined(ENABLE_DOGECHAT) && (defined(ESP32) || defined(NRF52_PLATFORM))
+  DogechatBridge* dogechat_bridge = nullptr;
+#endif
 
 /* END GLOBAL OBJECTS */
 
@@ -155,7 +163,20 @@ void setup() {
   sprintf(dev_name, "%s%s", BLE_NAME_PREFIX, the_mesh.getNodeName());
   serial_interface.begin(dev_name, the_mesh.getBLEPin());
 #else
+  // USB Serial for MeshCore companion
   serial_interface.begin(Serial);
+
+  // Standalone Dogechat BLE if enabled (USB serial for MeshCore, BLE for Dogechat)
+  #ifdef ENABLE_DOGECHAT
+  dogechat_bridge = new DogechatBridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
+  dogechat_bridge->begin();
+  if (dogechat_bridge->beginStandalone(the_mesh.getNodeName())) {
+    Serial.println("Dogechat BLE service started (standalone mode)");
+  } else {
+    Serial.println("ERROR: Failed to start Dogechat BLE service!");
+  }
+  the_mesh.initDogechat(dogechat_bridge);
+  #endif
 #endif
   the_mesh.startInterface(serial_interface);
 #elif defined(RP2040_PLATFORM)
@@ -202,12 +223,39 @@ void setup() {
   char dev_name[32+16];
   sprintf(dev_name, "%s%s", BLE_NAME_PREFIX, the_mesh.getNodeName());
   serial_interface.begin(dev_name, the_mesh.getBLEPin());
+
+  // Initialize Dogechat bridge after BLE server is created
+  #ifdef ENABLE_DOGECHAT
+  dogechat_bridge = new DogechatBridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
+  dogechat_bridge->begin();
+  if (serial_interface.getBLEServer() != nullptr) {
+    if (dogechat_bridge->attachBLEService(serial_interface.getBLEServer())) {
+      serial_interface.setDogechatService(&dogechat_bridge->getBLEService());
+      Serial.println("Dogechat BLE service attached");
+    }
+  }
+  the_mesh.initDogechat(dogechat_bridge);
+  #endif
 #elif defined(SERIAL_RX)
   companion_serial.setPins(SERIAL_RX, SERIAL_TX);
   companion_serial.begin(115200);
   serial_interface.begin(companion_serial);
 #else
+  // Default: USB Serial for MeshCore companion
   serial_interface.begin(Serial);
+
+  // Standalone Dogechat BLE if enabled (no SerialBLEInterface)
+  #ifdef ENABLE_DOGECHAT
+  dogechat_bridge = new DogechatBridge(the_mesh, the_mesh.self_id, the_mesh.getNodeName());
+  dogechat_bridge->begin();
+
+  if (dogechat_bridge->beginStandalone(the_mesh.getNodeName())) {
+    Serial.println("Dogechat BLE service started (standalone mode)");
+  } else {
+    Serial.println("ERROR: Failed to start Dogechat BLE service!");
+  }
+  the_mesh.initDogechat(dogechat_bridge);
+  #endif
 #endif
   the_mesh.startInterface(serial_interface);
 #else
@@ -228,4 +276,10 @@ void loop() {
   ui_task.loop();
 #endif
   rtc_clock.tick();
+
+#if defined(ENABLE_DOGECHAT) && (defined(ESP32) || defined(NRF52_PLATFORM))
+  if (dogechat_bridge != nullptr) {
+    dogechat_bridge->loop();
+  }
+#endif
 }

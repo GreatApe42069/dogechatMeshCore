@@ -70,6 +70,10 @@
 #include <helpers/BaseChatMesh.h>
 #include <helpers/TransportKeyStore.h>
 
+#if defined(ENABLE_DOGECHAT) && (defined(ESP32) || defined(NRF52_PLATFORM))
+class DogechatBridge;  // Forward declaration
+#endif
+
 /* -------------------------------------------------------------------------------------- */
 
 #define REQ_TYPE_GET_STATUS             0x01 // same as _GET_STATS
@@ -94,6 +98,11 @@ public:
   const char *getNodeName();
   NodePrefs *getNodePrefs();
   uint32_t getBLEPin();
+
+#if defined(ENABLE_DOGECHAT) && (defined(ESP32) || defined(NRF52_PLATFORM))
+  void initDogechat(DogechatBridge* bridge);
+  DogechatBridge* getDogechatBridge() { return _dogechatBridge; }
+#endif
 
   void loop();
   void handleCmdFrame(size_t len);
@@ -224,6 +233,10 @@ private:
 
   #define ADVERT_PATH_TABLE_SIZE   16
   AdvertPath advert_paths[ADVERT_PATH_TABLE_SIZE]; // circular table
+
+#if defined(ENABLE_DOGECHAT) && (defined(ESP32) || defined(NRF52_PLATFORM))
+  DogechatBridge* _dogechatBridge;
+#endif
 };
 
 extern MyMesh the_mesh;

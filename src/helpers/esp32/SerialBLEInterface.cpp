@@ -1,5 +1,9 @@
 #include "SerialBLEInterface.h"
 
+#ifdef ENABLE_DOGECHAT
+#include "../dogechat/DogechatBLEService.h"
+#endif
+
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
 
@@ -97,6 +101,12 @@ void SerialBLEInterface::onDisconnect(BLEServer* pServer) {
 
     // loop() will detect this on next loop, and set deviceConnected to false
   }
+
+#ifdef ENABLE_DOGECHAT
+  if (_dogechatService != nullptr) {
+    _dogechatService->onServerDisconnect();
+  }
+#endif
 }
 
 // -------- BLECharacteristicCallbacks methods
